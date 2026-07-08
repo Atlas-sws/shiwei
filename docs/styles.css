@@ -869,6 +869,39 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 }
 .toast.show { opacity: 1; transform: none; }
 
+/* ---------- 买菜清单 ---------- */
+.top-actions { display: flex; align-items: center; gap: 10px; }
+
+.pick-list {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  transition: opacity 0.15s;
+}
+.pick-item:last-child { border-bottom: none; }
+.pick-item .ing-check { pointer-events: none; }
+.pick-name { flex: 1; min-width: 0; font-size: 15.5px; }
+.pick-meta { flex: none; color: var(--ink-3); font-size: 12.5px; }
+.pick-item.on .ing-check { background: var(--accent); border-color: var(--accent); }
+.pick-item.on .ing-check::after { opacity: 1; }
+
+.shop-tools { display: flex; gap: 16px; }
+.shop-tools .aux { color: var(--accent); }
+.shop-main { flex: 1; min-width: 0; }
+.shop-note { display: block; color: var(--ink-3); font-size: 12.5px; line-height: 1.5; margin-top: 2px; }
+.shop-item .ing-amt { align-self: flex-start; }
+
 /* ---------- 杂项 ---------- */
 .divider { height: 1px; background: var(--line); margin: 26px 0; }
 .muted { color: var(--ink-3); }

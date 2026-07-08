@@ -132,6 +132,37 @@ try {
   // 备份导出的数据完整性（不触发下载，直接校验打包函数用到的数据）
   await check('图片库无泄漏残留', "dbGetAll('images').then(a => a.length === 0)");
 
+  // 买菜清单：解析器 + 模糊合并 + 聚合（纯函数）
+  await check('解析 2汤匙', "parseAmount('2 汤匙')?.qty === 2 && parseAmount('2 汤匙')?.unit === '汤匙'");
+  await check('解析 半茶匙=0.5', "parseAmount('半茶匙')?.qty === 0.5");
+  await check('解析 适量→null', "parseAmount('适量') === null");
+  await check('解析 带括号→null', "parseAmount('2个（约400g）') === null");
+  await check('模糊合并 油=食用油', "canonicalGood('油') === canonicalGood('食用油')");
+  await check('模糊合并 香油≠食用油', "canonicalGood('香油') !== canonicalGood('食用油')");
+  await check('聚合 食用油=3汤匙', `(() => {
+    const ids = state.recipes.filter(r => ['番茄炒蛋','可乐鸡翅'].includes(r.title)).map(r => r.id);
+    const oil = buildShoppingList(ids).find(i => i.name === '食用油');
+    return !!oil && oil.summed.join('+') === '3汤匙';
+  })()`);
+
+  // 买菜清单：选菜 → 生成 → 勾选 → 持久化 → 重开仍在
+  await eval_("location.hash = '#/shop'");
+  await waitFor("!!document.querySelector('.pick-list')", '买菜页');
+  await eval_(`(() => {
+    const want = new Set(state.recipes.filter(r => ['番茄炒蛋','可乐鸡翅'].includes(r.title)).map(r => r.id));
+    document.querySelectorAll('.pick-item').forEach(b => { if (want.has(b.dataset.id)) b.click(); });
+  })()`);
+  await waitFor("document.querySelectorAll('#shop-list .shop-item').length > 0", '清单生成');
+  await check('清单含 食用油 3汤匙', "[...document.querySelectorAll('#shop-list .shop-item')].some(li => li.dataset.good === '食用油' && /3汤匙/.test(li.querySelector('.ing-amt') ? li.querySelector('.ing-amt').textContent : ''))");
+  await eval_("[...document.querySelectorAll('#shop-list .shop-item')].find(li => li.dataset.good === '食用油').click()");
+  await waitFor("dbGet('meta','shoppingList').then(r => !!r && r.value.checked.includes('食用油'))", '勾选持久化');
+  await eval_("location.hash = '#/'");
+  await waitFor("!!document.querySelector('#search')", '回首页');
+  await eval_("location.hash = '#/shop'");
+  await waitFor("!!document.querySelector('.pick-list')", '再入买菜页');
+  await check('选择持久化(2道)', "document.querySelectorAll('.pick-item.on').length === 2");
+  await check('勾选持久化(渲染)', "[...document.querySelectorAll('#shop-list .shop-item')].some(li => li.dataset.good === '食用油' && li.classList.contains('done'))");
+
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   if (exceptions.length) console.log('PAGE EXCEPTIONS:\n' + exceptions.join('\n'));
   process.exitCode = failed || exceptions.length ? 1 : 0;

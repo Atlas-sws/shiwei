@@ -31,6 +31,7 @@ const ICONS = {
   shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/><path d="m9 12 2 2 4-4"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.5"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12L8 7m4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
+  cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h1.7l1.6 9.4a1.5 1.5 0 0 0 1.5 1.2h6.8a1.5 1.5 0 0 0 1.5-1.2L19 8H6.3"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="16.5" cy="19.5" r="1.3"/></svg>',
   chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="m9 5 7 7-7 7"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2m0 15v2m9.5-9.5h-2m-15 0h-2m16.2-6.7-1.4 1.4M6.7 17.3l-1.4 1.4m0-13.4 1.4 1.4m10.6 10.6 1.4 1.4"/></svg>',
   emptyBowl: '<svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M38 16c-3 5 3 8 0 13M50 12c-3 5 3 8 0 13M62 16c-3 5 3 8 0 13"/><path d="M16 46h64c0 13-8 22-17 26l-2 8H35l-2-8c-9-4-17-13-17-26z"/><path d="M30 56c2 5 6 9 10 11"/></svg>'
@@ -416,7 +417,10 @@ function renderHome() {
         <span class="brand-mark">拾</span>
         <div><h1>拾味</h1><p class="sub">${n ? `已收录 ${n} 道菜` : '私人菜谱手册'}</p></div>
       </div>
-      <a class="icon-btn" href="#/settings" aria-label="设置">${ICONS.settings}</a>
+      <div class="top-actions">
+        <a class="icon-btn" href="#/shop" aria-label="买菜清单">${ICONS.cart}</a>
+        <a class="icon-btn" href="#/settings" aria-label="设置">${ICONS.settings}</a>
+      </div>
     </header>
     ${installTipHTML()}
     <div class="search-wrap">
@@ -1086,6 +1090,175 @@ async function importBackup(file) {
 }
 
 /* ==========================================================================
+   视图：买菜清单
+   ========================================================================== */
+// 已知同义词 → 规范食材名。仅并入明确列出的别名；表外食材按原名（trim/去空格）分组，
+// 因此「香油/辣椒油/蚝油」不会被误并进「油」。可按需扩充。
+const GOOD_CANON = {
+  '油': '食用油', '食用油': '食用油', '色拉油': '食用油', '植物油': '食用油',
+  '西红柿': '番茄', '番茄': '番茄'
+};
+function canonicalGood(name) {
+  const n = String(name || '').trim().replace(/\s+/g, '');
+  return GOOD_CANON[n] || n;
+}
+// 严格解析：整串须为「数字(含半/小数) + 已知单位」，否则返回 null（回退罗列）。不跨单位换算、不解析中文数字。
+const AMOUNT_RE = /^\s*(半|\d+(?:\.\d+)?)\s*(汤匙|茶匙|千克|毫升|克|kg|g|ml|升|l|个|根|片|瓣|把|滴|杯|罐|袋|斤|两|颗|块|条|朵|张|包|粒|尾|只)\s*$/i;
+function parseAmount(str) {
+  const m = AMOUNT_RE.exec(String(str || ''));
+  if (!m) return null;
+  const qty = m[1] === '半' ? 0.5 : parseFloat(m[1]);
+  if (!Number.isFinite(qty) || qty <= 0) return null;
+  return { qty, unit: m[2].toLowerCase() };
+}
+const fmtQty = (q) => (Number.isInteger(q) ? String(q) : String(Math.round(q * 100) / 100));
+// 聚合选中菜谱的配料 → 清单项[{ name, summed:[..], notes:[{amount, recipe}] }]
+function buildShoppingList(recipeIds) {
+  const idset = new Set(recipeIds);
+  const groups = new Map();
+  for (const r of state.recipes) {
+    if (!idset.has(r.id)) continue;
+    for (const ing of r.ingredients) {
+      const name = String(ing.name || '').trim();
+      if (!name) continue;
+      const key = canonicalGood(name);
+      let g = groups.get(key);
+      if (!g) { g = { name: key, sums: new Map(), notes: [] }; groups.set(key, g); }
+      const amt = String(ing.amount || '').trim();
+      const p = amt ? parseAmount(amt) : null;
+      if (p) g.sums.set(p.unit, (g.sums.get(p.unit) || 0) + p.qty);
+      else g.notes.push({ amount: amt, recipe: r.title });
+    }
+  }
+  return [...groups.values()]
+    .map((g) => ({ name: g.name, summed: [...g.sums.entries()].map(([u, q]) => fmtQty(q) + u), notes: g.notes }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+}
+async function getShoppingList() {
+  const rec = await dbGet('meta', 'shoppingList');
+  const v = (rec && rec.value) || {};
+  return { recipeIds: Array.isArray(v.recipeIds) ? v.recipeIds : [], checked: Array.isArray(v.checked) ? v.checked : [] };
+}
+async function saveShoppingList(recipeIds, checked) {
+  await dbPut('meta', { key: 'shoppingList', value: { recipeIds: [...recipeIds], checked: [...checked] } });
+}
+function shoppingListToText(items, checked) {
+  const lines = ['【拾味 · 买菜清单】', ''];
+  for (const it of items) {
+    const amt = it.summed.join(' + ');
+    lines.push((checked.has(it.name) ? '✓ ' : '· ') + it.name + (amt ? '　' + amt : ''));
+    for (const n of it.notes) lines.push('　　' + (n.amount || '适量') + '（' + n.recipe + '）');
+  }
+  return lines.join('\n').trim();
+}
+
+async function renderShop() {
+  document.title = '买菜 · 拾味';
+  const sl = await getShoppingList();
+  const validIds = new Set(state.recipes.map((r) => r.id));
+  const selected = new Set(sl.recipeIds.filter((id) => validIds.has(id)));
+  const checked = new Set(sl.checked);
+
+  const pickRow = (r) => {
+    const n = r.ingredients.filter((i) => i.name && i.name.trim()).length;
+    return `<button class="pick-item ${selected.has(r.id) ? 'on' : ''}" data-id="${esc(r.id)}">
+        <span class="ing-check"></span>
+        <span class="pick-name">${esc(r.title)}</span>
+        <span class="pick-meta">${n} 种配料</span>
+      </button>`;
+  };
+
+  appEl.innerHTML = `
+    <div class="page-top">
+      <a class="icon-btn" href="#/" aria-label="返回">${ICONS.back}</a>
+      <h1>买菜</h1>
+    </div>
+    ${state.recipes.length ? `
+    <section class="section" style="margin-top:6px">
+      <div class="section-head"><h2>选今天做的菜</h2><span class="aux" id="pick-count"></span></div>
+      <div class="pick-list">${state.recipes.map(pickRow).join('')}</div>
+    </section>
+    <section class="section">
+      <div class="section-head">
+        <h2>买菜清单</h2>
+        <div class="shop-tools">
+          <button class="aux" id="shop-copy">复制</button>
+          <button class="aux" id="shop-clear">清空</button>
+        </div>
+      </div>
+      <div id="shop-list"></div>
+    </section>` : `
+    <div class="empty">${ICONS.emptyBowl}<h2>还没有菜谱</h2><p>先去记几道菜，再来生成买菜清单</p></div>`}`;
+
+  const listEl = $('#shop-list');
+  const countEl = $('#pick-count');
+  const persist = () => saveShoppingList([...selected], [...checked]);
+
+  function renderList() {
+    if (countEl) countEl.textContent = selected.size ? `已选 ${selected.size} 道` : '';
+    const items = buildShoppingList([...selected]);
+    const names = new Set(items.map((i) => i.name));
+    let pruned = false;
+    for (const c of [...checked]) if (!names.has(c)) { checked.delete(c); pruned = true; }
+    if (pruned) persist();
+
+    if (!selected.size) {
+      listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>在上面选几道菜，这里会自动列出要买的食材</p></div>`;
+      return;
+    }
+    if (!items.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>选中的菜谱还没有填配料</p></div>`;
+      return;
+    }
+    listEl.innerHTML = `<ul class="ing-list">${items.map((it) => {
+      const amt = it.summed.join(' + ');
+      const note = it.notes.length
+        ? `<span class="shop-note">${it.notes.map((n) => esc((n.amount || '适量') + '（' + n.recipe + '）')).join(' · ')}</span>`
+        : '';
+      return `<li class="ing shop-item ${checked.has(it.name) ? 'done' : ''}" data-good="${esc(it.name)}">
+          <span class="ing-check"></span>
+          <div class="shop-main"><span class="ing-name">${esc(it.name)}</span>${note}</div>
+          ${amt ? `<span class="ing-amt">${esc(amt)}</span>` : ''}
+        </li>`;
+    }).join('')}</ul>`;
+  }
+  renderList();
+
+  $('.pick-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pick-item');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (selected.has(id)) selected.delete(id); else selected.add(id);
+    btn.classList.toggle('on', selected.has(id));
+    persist();
+    renderList();
+  });
+  listEl?.addEventListener('click', (e) => {
+    const li = e.target.closest('.shop-item');
+    if (!li) return;
+    const good = li.dataset.good;
+    if (checked.has(good)) checked.delete(good); else checked.add(good);
+    li.classList.toggle('done', checked.has(good));
+    persist();
+  });
+  $('#shop-copy')?.addEventListener('click', async () => {
+    const items = buildShoppingList([...selected]);
+    if (!items.length) { toast('清单是空的'); return; }
+    const text = shoppingListToText(items, checked);
+    try { await navigator.clipboard.writeText(text); toast('清单已复制，可发给家人'); }
+    catch { toast('复制失败，请截图'); }
+  });
+  $('#shop-clear')?.addEventListener('click', async () => {
+    if (!selected.size) { toast('清单已经是空的'); return; }
+    const ok = await confirmDialog({ title: '清空买菜清单？', body: '会取消所有已选菜谱和勾选，菜谱本身不受影响。', okText: '清空' });
+    if (!ok) return;
+    selected.clear(); checked.clear();
+    await persist();
+    renderShop();
+  });
+}
+
+/* ==========================================================================
    路由与启动
    ========================================================================== */
 function route() {
@@ -1100,6 +1273,7 @@ function route() {
   else if ((m = h.match(/^#\/r\/(.+)$/))) renderDetail(decodeURIComponent(m[1]));
   else if (h === '#/new') renderEdit(null);
   else if ((m = h.match(/^#\/edit\/(.+)$/))) renderEdit(decodeURIComponent(m[1]));
+  else if (h === '#/shop') renderShop();
   else if (h === '#/settings') renderSettings();
   else renderHome();
   if (h !== '#/') window.scrollTo(0, 0);
