@@ -144,6 +144,11 @@ try {
     const oil = buildShoppingList(ids).find(i => i.name === '食用油');
     return !!oil && oil.summed.join('+') === '3汤匙';
   })()`);
+  await check('常备分栏 盐→staple', "buildShoppingList(state.recipes.map(r => r.id)).find(i => i.name === '盐')?.staple === true");
+  await check('常备分栏 食用油→staple', "buildShoppingList(state.recipes.map(r => r.id)).find(i => i.name === '食用油')?.staple === true");
+  await check('常备分栏 番茄→非staple', "buildShoppingList(state.recipes.map(r => r.id)).find(i => i.name === '番茄')?.staple === false");
+  await check('常备分栏 小葱→staple(含葱姜蒜)', "buildShoppingList(state.recipes.map(r => r.id)).find(i => i.name === '小葱')?.staple === true");
+  await check('复制文本分两段', "(() => { const t = shoppingListToText(buildShoppingList(state.recipes.map(r => r.id)), new Set()); return t.includes('主清单') && t.includes('常备调料（家里通常有）'); })()");
 
   // 买菜清单：选菜 → 生成 → 勾选 → 持久化 → 重开仍在
   await eval_("location.hash = '#/shop'");
@@ -152,16 +157,17 @@ try {
     const want = new Set(state.recipes.filter(r => ['番茄炒蛋','可乐鸡翅'].includes(r.title)).map(r => r.id));
     document.querySelectorAll('.pick-item').forEach(b => { if (want.has(b.dataset.id)) b.click(); });
   })()`);
-  await waitFor("document.querySelectorAll('#shop-list .shop-item').length > 0", '清单生成');
-  await check('清单含 食用油 3汤匙', "[...document.querySelectorAll('#shop-list .shop-item')].some(li => li.dataset.good === '食用油' && /3汤匙/.test(li.querySelector('.ing-amt') ? li.querySelector('.ing-amt').textContent : ''))");
-  await eval_("[...document.querySelectorAll('#shop-list .shop-item')].find(li => li.dataset.good === '食用油').click()");
+  await waitFor("document.querySelectorAll('#shop-list .shop-item, #staple-list .shop-item').length > 0", '清单生成');
+  await check('食用油 落常备栏·3汤匙', "(() => { const li = document.querySelector('#staple-list .shop-item[data-good=\"食用油\"]'); return !!li && /3汤匙/.test(li.querySelector('.ing-amt') ? li.querySelector('.ing-amt').textContent : ''); })()");
+  await check('番茄 落主清单', "!!document.querySelector('#shop-list .shop-item[data-good=\"番茄\"]')");
+  await eval_("document.querySelector('#staple-list .shop-item[data-good=\"食用油\"]').click()");
   await waitFor("dbGet('meta','shoppingList').then(r => !!r && r.value.checked.includes('食用油'))", '勾选持久化');
   await eval_("location.hash = '#/'");
   await waitFor("!!document.querySelector('#search')", '回首页');
   await eval_("location.hash = '#/shop'");
   await waitFor("!!document.querySelector('.pick-list')", '再入买菜页');
   await check('选择持久化(2道)', "document.querySelectorAll('.pick-item.on').length === 2");
-  await check('勾选持久化(渲染)', "[...document.querySelectorAll('#shop-list .shop-item')].some(li => li.dataset.good === '食用油' && li.classList.contains('done'))");
+  await check('勾选持久化(渲染)', "!!document.querySelector('#staple-list .shop-item[data-good=\"食用油\"].done')");
 
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   if (exceptions.length) console.log('PAGE EXCEPTIONS:\n' + exceptions.join('\n'));

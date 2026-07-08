@@ -1102,6 +1102,19 @@ function canonicalGood(name) {
   const n = String(name || '').trim().replace(/\s+/g, '');
   return GOOD_CANON[n] || n;
 }
+// 常备调料：家里通常有、不用每次买，单列一栏。按规范名精确匹配（不做子串，避免误判），可扩充。
+const STAPLE_GOODS = new Set([
+  // 调味
+  '盐', '糖', '白糖', '冰糖', '红糖', '酱油', '生抽', '老抽', '蒸鱼豉油', '蚝油',
+  '醋', '陈醋', '香醋', '米醋', '白醋', '料酒', '食用油', '香油', '芝麻油',
+  '花椒', '八角', '桂皮', '香叶', '干辣椒', '辣椒面', '辣椒油', '豆瓣酱', '番茄酱',
+  '胡椒粉', '白胡椒粉', '黑胡椒粉', '五香粉', '孜然粉', '咖喱粉', '鸡精', '味精', '蜂蜜',
+  // 粉类 / 发酵
+  '淀粉', '生粉', '玉米淀粉', '红薯淀粉', '面粉', '小苏打', '泡打粉', '酵母', '芝麻', '白芝麻',
+  // 辛香（用户选择也归常备）
+  '葱', '小葱', '大葱', '香葱', '姜', '生姜', '蒜', '大蒜', '蒜瓣'
+]);
+const isStaple = (canonName) => STAPLE_GOODS.has(canonName);
 // 严格解析：整串须为「数字(含半/小数) + 已知单位」，否则返回 null（回退罗列）。不跨单位换算、不解析中文数字。
 const AMOUNT_RE = /^\s*(半|\d+(?:\.\d+)?)\s*(汤匙|茶匙|千克|毫升|克|kg|g|ml|升|l|个|根|片|瓣|把|滴|杯|罐|袋|斤|两|颗|块|条|朵|张|包|粒|尾|只)\s*$/i;
 function parseAmount(str) {
@@ -1131,9 +1144,14 @@ function buildShoppingList(recipeIds) {
     }
   }
   return [...groups.values()]
-    .map((g) => ({ name: g.name, summed: [...g.sums.entries()].map(([u, q]) => fmtQty(q) + u), notes: g.notes }))
+    .map((g) => ({ name: g.name, staple: isStaple(g.name), summed: [...g.sums.entries()].map(([u, q]) => fmtQty(q) + u), notes: g.notes }))
     .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
 }
+// 把清单项分成「主清单 / 常备调料」两组（渲染与文本导出共用）
+const partitionStaples = (items) => ({
+  main: items.filter((i) => !i.staple),
+  staples: items.filter((i) => i.staple)
+});
 async function getShoppingList() {
   const rec = await dbGet('meta', 'shoppingList');
   const v = (rec && rec.value) || {};
@@ -1143,11 +1161,21 @@ async function saveShoppingList(recipeIds, checked) {
   await dbPut('meta', { key: 'shoppingList', value: { recipeIds: [...recipeIds], checked: [...checked] } });
 }
 function shoppingListToText(items, checked) {
-  const lines = ['【拾味 · 买菜清单】', ''];
-  for (const it of items) {
+  const fmtItem = (it) => {
     const amt = it.summed.join(' + ');
-    lines.push((checked.has(it.name) ? '✓ ' : '· ') + it.name + (amt ? '　' + amt : ''));
-    for (const n of it.notes) lines.push('　　' + (n.amount || '适量') + '（' + n.recipe + '）');
+    const head = (checked.has(it.name) ? '✓ ' : '· ') + it.name + (amt ? '　' + amt : '');
+    return [head, ...it.notes.map((n) => '　　' + (n.amount || '适量') + '（' + n.recipe + '）')];
+  };
+  const { main, staples } = partitionStaples(items);
+  const lines = ['【拾味 · 买菜清单】', ''];
+  if (main.length) {
+    lines.push('主清单');
+    for (const it of main) lines.push(...fmtItem(it));
+  }
+  if (staples.length) {
+    if (main.length) lines.push('');
+    lines.push('常备调料（家里通常有）');
+    for (const it of staples) lines.push(...fmtItem(it));
   }
   return lines.join('\n').trim();
 }
@@ -1187,12 +1215,31 @@ async function renderShop() {
         </div>
       </div>
       <div id="shop-list"></div>
+    </section>
+    <section class="section" id="staple-sec" style="display:none">
+      <div class="section-head"><h2>常备调料</h2><span class="aux">家里通常有 · 缺了再买</span></div>
+      <div id="staple-list"></div>
     </section>` : `
     <div class="empty">${ICONS.emptyBowl}<h2>还没有菜谱</h2><p>先去记几道菜，再来生成买菜清单</p></div>`}`;
 
   const listEl = $('#shop-list');
+  const stapleSec = $('#staple-sec');
+  const stapleEl = $('#staple-list');
   const countEl = $('#pick-count');
   const persist = () => saveShoppingList([...selected], [...checked]);
+
+  const itemLi = (it) => {
+    const amt = it.summed.join(' + ');
+    const note = it.notes.length
+      ? `<span class="shop-note">${it.notes.map((n) => esc((n.amount || '适量') + '（' + n.recipe + '）')).join(' · ')}</span>`
+      : '';
+    return `<li class="ing shop-item ${checked.has(it.name) ? 'done' : ''}" data-good="${esc(it.name)}">
+        <span class="ing-check"></span>
+        <div class="shop-main"><span class="ing-name">${esc(it.name)}</span>${note}</div>
+        ${amt ? `<span class="ing-amt">${esc(amt)}</span>` : ''}
+      </li>`;
+  };
+  const listHtml = (arr) => `<ul class="ing-list">${arr.map(itemLi).join('')}</ul>`;
 
   function renderList() {
     if (countEl) countEl.textContent = selected.size ? `已选 ${selected.size} 道` : '';
@@ -1202,6 +1249,10 @@ async function renderShop() {
     for (const c of [...checked]) if (!names.has(c)) { checked.delete(c); pruned = true; }
     if (pruned) persist();
 
+    const { main, staples } = partitionStaples(items);
+    if (stapleSec) stapleSec.style.display = staples.length ? '' : 'none';
+    if (stapleEl && staples.length) stapleEl.innerHTML = listHtml(staples);
+
     if (!selected.size) {
       listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>在上面选几道菜，这里会自动列出要买的食材</p></div>`;
       return;
@@ -1210,19 +1261,20 @@ async function renderShop() {
       listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>选中的菜谱还没有填配料</p></div>`;
       return;
     }
-    listEl.innerHTML = `<ul class="ing-list">${items.map((it) => {
-      const amt = it.summed.join(' + ');
-      const note = it.notes.length
-        ? `<span class="shop-note">${it.notes.map((n) => esc((n.amount || '适量') + '（' + n.recipe + '）')).join(' · ')}</span>`
-        : '';
-      return `<li class="ing shop-item ${checked.has(it.name) ? 'done' : ''}" data-good="${esc(it.name)}">
-          <span class="ing-check"></span>
-          <div class="shop-main"><span class="ing-name">${esc(it.name)}</span>${note}</div>
-          ${amt ? `<span class="ing-amt">${esc(amt)}</span>` : ''}
-        </li>`;
-    }).join('')}</ul>`;
+    listEl.innerHTML = main.length
+      ? listHtml(main)
+      : `<div class="empty" style="padding:22px 0"><p>这几道菜要买的都是常备调料，见下方</p></div>`;
   }
   renderList();
+
+  const toggleItem = (e) => {
+    const li = e.target.closest('.shop-item');
+    if (!li) return;
+    const good = li.dataset.good;
+    if (checked.has(good)) checked.delete(good); else checked.add(good);
+    li.classList.toggle('done', checked.has(good));
+    persist();
+  };
 
   $('.pick-list')?.addEventListener('click', (e) => {
     const btn = e.target.closest('.pick-item');
@@ -1233,14 +1285,8 @@ async function renderShop() {
     persist();
     renderList();
   });
-  listEl?.addEventListener('click', (e) => {
-    const li = e.target.closest('.shop-item');
-    if (!li) return;
-    const good = li.dataset.good;
-    if (checked.has(good)) checked.delete(good); else checked.add(good);
-    li.classList.toggle('done', checked.has(good));
-    persist();
-  });
+  listEl?.addEventListener('click', toggleItem);
+  stapleEl?.addEventListener('click', toggleItem);
   $('#shop-copy')?.addEventListener('click', async () => {
     const items = buildShoppingList([...selected]);
     if (!items.length) { toast('清单是空的'); return; }
