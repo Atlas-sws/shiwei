@@ -25,6 +25,5 @@
 
 ## 待办 / 未来可选
 
-- [ ] GitHub Pages 正式部署（唯一卡点：需用户 GitHub 授权，gh CLI 已装好）
-- [ ] 部署后把正式网址回填 README 安装指南
+- [x] GitHub Pages 已部署（2026-07-08）：**<https://atlas-sws.github.io/shiwei/>**（仓库 <https://github.com/Atlas-sws/shiwei>，公开可见性经用户确认；线上 e2e 9 项全过）
 - 未来可选：从网页链接导入菜谱、购物清单聚合、份量换算、周菜单计划

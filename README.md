@@ -4,7 +4,7 @@
 
 ## 安装到 iPhone
 
-1. 用 **Safari** 打开应用网址（GitHub Pages 部署后填入）
+1. 用 **Safari** 打开应用网址：**<https://atlas-sws.github.io/shiwei/>**
 2. 点底部**分享按钮**（方框带向上箭头）
 3. 选择**「添加到主屏幕」**
 4. 主屏幕出现「拾」字图标，点开即用，之后完全离线可用
@@ -25,7 +25,7 @@
 
 零构建、零依赖。应用本体在 `docs/`（同时是 GitHub Pages 的发布目录）：
 
-```
+```text
 docs/
   index.html          入口
   styles.css          设计系统（暖米纸 + 赭陶 + 宋体标题，自动深浅色）
