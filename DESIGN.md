@@ -26,4 +26,11 @@
 ## 待办 / 未来可选
 
 - [x] GitHub Pages 已部署（2026-07-08）：**<https://atlas-sws.github.io/shiwei/>**（仓库 <https://github.com/Atlas-sws/shiwei>，公开可见性经用户确认；线上 e2e 9 项全过）
-- 未来可选：从网页链接导入菜谱、购物清单聚合、份量换算、周菜单计划
+- [ ] **买菜清单（v1，已设计待实现）**：选菜 → 聚合配料 → 可勾选清单，专用 `#/shop` 页。见 [adr/0002](adr/0002-shopping-list-amount-aggregation.md)、[adr/0003](adr/0003-shopping-list-single-persisted.md)
+- AI 实时语音助手：搁置（与离线/零成本根基冲突），见 [adr/0001](adr/0001-defer-ai-voice-assistant.md)
+- 未来可选：从网页链接导入菜谱、份量换算、周菜单计划
+
+## 通用语言 / 设计决策
+
+- 领域词汇表：[CONTEXT.md](CONTEXT.md)
+- 架构决策记录：[adr/](adr/)
