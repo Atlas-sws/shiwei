@@ -1155,25 +1155,34 @@ const partitionStaples = (items) => ({
 async function getShoppingList() {
   const rec = await dbGet('meta', 'shoppingList');
   const v = (rec && rec.value) || {};
-  return { recipeIds: Array.isArray(v.recipeIds) ? v.recipeIds : [], checked: Array.isArray(v.checked) ? v.checked : [] };
+  const manualItems = (Array.isArray(v.manualItems) ? v.manualItems : [])
+    .map((m) => ({ id: m.id || ('m-' + uid()), name: String(m.name || ''), amount: String(m.amount || ''), done: !!m.done }))
+    .filter((m) => m.name);
+  return {
+    recipeIds: Array.isArray(v.recipeIds) ? v.recipeIds : [],
+    checked: Array.isArray(v.checked) ? v.checked : [],
+    manualItems
+  };
 }
-async function saveShoppingList(recipeIds, checked) {
-  await dbPut('meta', { key: 'shoppingList', value: { recipeIds: [...recipeIds], checked: [...checked] } });
+async function saveShoppingList(recipeIds, checked, manualItems) {
+  await dbPut('meta', { key: 'shoppingList', value: { recipeIds: [...recipeIds], checked: [...checked], manualItems: [...manualItems] } });
 }
-function shoppingListToText(items, checked) {
+function shoppingListToText(items, checked, manual = []) {
   const fmtItem = (it) => {
     const amt = it.summed.join(' + ');
     const head = (checked.has(it.name) ? '✓ ' : '· ') + it.name + (amt ? '　' + amt : '');
     return [head, ...it.notes.map((n) => '　　' + (n.amount || '适量') + '（' + n.recipe + '）')];
   };
+  const fmtManual = (m) => (m.done ? '✓ ' : '· ') + m.name + (m.amount ? '　' + m.amount : '');
   const { main, staples } = partitionStaples(items);
   const lines = ['【拾味 · 买菜清单】', ''];
-  if (main.length) {
+  if (main.length || manual.length) {
     lines.push('主清单');
     for (const it of main) lines.push(...fmtItem(it));
+    for (const m of manual) lines.push(fmtManual(m));
   }
   if (staples.length) {
-    if (main.length) lines.push('');
+    if (main.length || manual.length) lines.push('');
     lines.push('常备调料（家里通常有）');
     for (const it of staples) lines.push(...fmtItem(it));
   }
@@ -1215,18 +1224,27 @@ async function renderShop() {
         </div>
       </div>
       <div id="shop-list"></div>
+      <div id="manual-list"></div>
+      <button class="add-row-btn" id="add-manual">＋ 手动添加</button>
+      <div class="manual-form hidden" id="manual-form">
+        <input class="input name" id="manual-name" maxlength="30" placeholder="食材" autocomplete="off">
+        <input class="input amt" id="manual-amt" maxlength="20" placeholder="数量" autocomplete="off">
+        <button class="btn primary" id="manual-add">添加</button>
+      </div>
     </section>
     <section class="section" id="staple-sec" style="display:none">
-      <div class="section-head"><h2>常备调料</h2><span class="aux">家里通常有 · 缺了再买</span></div>
+      <div class="section-head"><h2>常备调料</h2></div>
       <div id="staple-list"></div>
     </section>` : `
     <div class="empty">${ICONS.emptyBowl}<h2>还没有菜谱</h2><p>先去记几道菜，再来生成买菜清单</p></div>`}`;
 
   const listEl = $('#shop-list');
+  const manualEl = $('#manual-list');
   const stapleSec = $('#staple-sec');
   const stapleEl = $('#staple-list');
   const countEl = $('#pick-count');
-  const persist = () => saveShoppingList([...selected], [...checked]);
+  let manual = sl.manualItems;
+  const persist = () => saveShoppingList([...selected], [...checked], manual);
 
   const itemLi = (it) => {
     const amt = it.summed.join(' + ');
@@ -1239,7 +1257,13 @@ async function renderShop() {
         ${amt ? `<span class="ing-amt">${esc(amt)}</span>` : ''}
       </li>`;
   };
-  const listHtml = (arr) => `<ul class="ing-list">${arr.map(itemLi).join('')}</ul>`;
+  const manualLi = (m) => `<li class="ing shop-item ${m.done ? 'done' : ''}" data-manual="${esc(m.id)}">
+      <span class="ing-check"></span>
+      <div class="shop-main"><span class="ing-name">${esc(m.name)}</span></div>
+      ${m.amount ? `<span class="ing-amt">${esc(m.amount)}</span>` : ''}
+      <button class="row-x" data-del-manual aria-label="删除">✕</button>
+    </li>`;
+  const listHtml = (arr, li = itemLi) => `<ul class="ing-list">${arr.map(li).join('')}</ul>`;
 
   function renderList() {
     if (countEl) countEl.textContent = selected.size ? `已选 ${selected.size} 道` : '';
@@ -1252,28 +1276,54 @@ async function renderShop() {
     const { main, staples } = partitionStaples(items);
     if (stapleSec) stapleSec.style.display = staples.length ? '' : 'none';
     if (stapleEl && staples.length) stapleEl.innerHTML = listHtml(staples);
+    manualEl.innerHTML = manual.length ? listHtml(manual, manualLi) : '';
 
-    if (!selected.size) {
-      listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>在上面选几道菜，这里会自动列出要买的食材</p></div>`;
-      return;
+    if (main.length) {
+      listEl.innerHTML = listHtml(main);
+    } else if (selected.size && staples.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:22px 0"><p>这几道菜要买的都是常备调料，见下方</p></div>`;
+    } else if (selected.size && !items.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:22px 0"><p>选中的菜谱还没有填配料</p></div>`;
+    } else if (!selected.size && !manual.length) {
+      listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>在上面选几道菜，或手动添加要买的食材</p></div>`;
+    } else {
+      listEl.innerHTML = '';
     }
-    if (!items.length) {
-      listEl.innerHTML = `<div class="empty" style="padding:26px 0"><p>选中的菜谱还没有填配料</p></div>`;
-      return;
-    }
-    listEl.innerHTML = main.length
-      ? listHtml(main)
-      : `<div class="empty" style="padding:22px 0"><p>这几道菜要买的都是常备调料，见下方</p></div>`;
   }
   renderList();
 
-  const toggleItem = (e) => {
+  const onListClick = (e) => {
+    const del = e.target.closest('[data-del-manual]');
+    if (del) {
+      const id = del.closest('.shop-item').dataset.manual;
+      manual = manual.filter((m) => m.id !== id);
+      persist();
+      renderList();
+      return;
+    }
     const li = e.target.closest('.shop-item');
     if (!li) return;
+    if (li.dataset.manual) {
+      const m = manual.find((x) => x.id === li.dataset.manual);
+      if (m) { m.done = !m.done; li.classList.toggle('done', m.done); persist(); }
+      return;
+    }
     const good = li.dataset.good;
     if (checked.has(good)) checked.delete(good); else checked.add(good);
     li.classList.toggle('done', checked.has(good));
     persist();
+  };
+
+  const addManual = () => {
+    const nameEl = $('#manual-name');
+    const amtEl = $('#manual-amt');
+    const name = nameEl.value.trim();
+    if (!name) { nameEl.focus(); return; }
+    manual.push({ id: 'm-' + uid(), name, amount: amtEl.value.trim(), done: false });
+    persist();
+    nameEl.value = ''; amtEl.value = '';
+    renderList();
+    nameEl.focus();
   };
 
   $('.pick-list')?.addEventListener('click', (e) => {
@@ -1285,20 +1335,30 @@ async function renderShop() {
     persist();
     renderList();
   });
-  listEl?.addEventListener('click', toggleItem);
-  stapleEl?.addEventListener('click', toggleItem);
+  listEl?.addEventListener('click', onListClick);
+  manualEl?.addEventListener('click', onListClick);
+  stapleEl?.addEventListener('click', onListClick);
+  $('#add-manual')?.addEventListener('click', () => {
+    const form = $('#manual-form');
+    form.classList.toggle('hidden');
+    if (!form.classList.contains('hidden')) $('#manual-name').focus();
+  });
+  $('#manual-add')?.addEventListener('click', addManual);
+  $('#manual-form')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); addManual(); }
+  });
   $('#shop-copy')?.addEventListener('click', async () => {
     const items = buildShoppingList([...selected]);
-    if (!items.length) { toast('清单是空的'); return; }
-    const text = shoppingListToText(items, checked);
+    if (!items.length && !manual.length) { toast('清单是空的'); return; }
+    const text = shoppingListToText(items, checked, manual);
     try { await navigator.clipboard.writeText(text); toast('清单已复制，可发给家人'); }
     catch { toast('复制失败，请截图'); }
   });
   $('#shop-clear')?.addEventListener('click', async () => {
-    if (!selected.size) { toast('清单已经是空的'); return; }
-    const ok = await confirmDialog({ title: '清空买菜清单？', body: '会取消所有已选菜谱和勾选，菜谱本身不受影响。', okText: '清空' });
+    if (!selected.size && !manual.length) { toast('清单已经是空的'); return; }
+    const ok = await confirmDialog({ title: '清空买菜清单？', body: '会取消已选菜谱、勾选和手动添加项，菜谱本身不受影响。', okText: '清空' });
     if (!ok) return;
-    selected.clear(); checked.clear();
+    selected.clear(); checked.clear(); manual = [];
     await persist();
     renderShop();
   });

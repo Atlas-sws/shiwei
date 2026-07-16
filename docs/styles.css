@@ -902,6 +902,11 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .shop-note { display: block; color: var(--ink-3); font-size: 12.5px; line-height: 1.5; margin-top: 2px; }
 .shop-item .ing-amt { align-self: flex-start; }
 
+.manual-form { display: flex; gap: 8px; margin-top: 10px; align-items: stretch; }
+.manual-form .name { flex: 1.6; min-width: 0; }
+.manual-form .amt { flex: 1; min-width: 0; }
+.manual-form .btn { flex: none; padding: 0 20px; }
+
 /* ---------- 杂项 ---------- */
 .divider { height: 1px; background: var(--line); margin: 26px 0; }
 .muted { color: var(--ink-3); }

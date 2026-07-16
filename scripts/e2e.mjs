@@ -169,6 +169,24 @@ try {
   await check('选择持久化(2道)', "document.querySelectorAll('.pick-item.on').length === 2");
   await check('勾选持久化(渲染)', "!!document.querySelector('#staple-list .shop-item[data-good=\"食用油\"].done')");
 
+  // 买菜清单：手动添加项（填名+量 → 入库 → 勾选 → 删除）
+  await eval_("document.querySelector('#add-manual').click()");
+  await waitFor("!document.querySelector('#manual-form').classList.contains('hidden')", '手动表单展开');
+  await eval_(`(() => {
+    const nm = document.querySelector('#manual-name'); nm.value = '垃圾袋';
+    const am = document.querySelector('#manual-amt'); am.value = '1卷';
+    document.querySelector('#manual-add').click();
+  })()`);
+  await waitFor("[...document.querySelectorAll('#manual-list .shop-item')].some(li => li.querySelector('.ing-name').textContent === '垃圾袋')", '手动项已添加');
+  await check('手动项含数量', "[...document.querySelectorAll('#manual-list .shop-item')].some(li => li.querySelector('.ing-name').textContent === '垃圾袋' && /1卷/.test(li.querySelector('.ing-amt') ? li.querySelector('.ing-amt').textContent : ''))");
+  await check('手动项持久化', "dbGet('meta','shoppingList').then(r => !!r && (r.value.manualItems || []).some(m => m.name === '垃圾袋' && m.amount === '1卷'))");
+  await check('复制含手动项(主清单段)', "(() => { const t = shoppingListToText(buildShoppingList([]), new Set(), [{ id: 'x', name: '垃圾袋', amount: '1卷', done: false }]); return t.includes('主清单') && t.includes('垃圾袋'); })()");
+  await eval_("[...document.querySelectorAll('#manual-list .shop-item')].find(li => li.querySelector('.ing-name').textContent === '垃圾袋').click()");
+  await waitFor("dbGet('meta','shoppingList').then(r => !!r && (r.value.manualItems || []).some(m => m.name === '垃圾袋' && m.done === true))", '手动项勾选持久化');
+  await eval_("[...document.querySelectorAll('#manual-list .shop-item')].find(li => li.querySelector('.ing-name').textContent === '垃圾袋').querySelector('[data-del-manual]').click()");
+  await waitFor("[...document.querySelectorAll('#manual-list .shop-item')].every(li => li.querySelector('.ing-name').textContent !== '垃圾袋')", '手动项已删除');
+  await check('删除后持久化清除', "dbGet('meta','shoppingList').then(r => !!r && !(r.value.manualItems || []).some(m => m.name === '垃圾袋'))");
+
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   if (exceptions.length) console.log('PAGE EXCEPTIONS:\n' + exceptions.join('\n'));
   process.exitCode = failed || exceptions.length ? 1 : 0;

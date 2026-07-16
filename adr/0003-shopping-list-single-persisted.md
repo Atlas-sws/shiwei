@@ -15,4 +15,4 @@ status: accepted
 ## Consequences
 
 - v1 不支持多份 / 命名清单与历史记录；如需，要改这份数据结构（届时可能才值得新建 object store）。
-- v1 不支持手动加非菜谱项（酱油、垃圾袋）——见 [DESIGN.md](../DESIGN.md) 待办。
+- ~~v1 不支持手动加非菜谱项~~ → 已由 [adr/0005](0005-shopping-list-manual-items.md) 补上：当前清单结构加 `manualItems`，仍是 meta 库单份清单。
