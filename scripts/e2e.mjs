@@ -128,6 +128,24 @@ try {
   await check('备份提醒 新用户静默', "backupReminderDue(Date.now()) === false");
   await check('备份提醒 久未备份触发', "backupReminderDue(Date.now() + 15 * 86400e3) === true");
 
+  // 专注烹饪模式（用种子菜谱：番茄炒蛋 4 步）
+  await eval_("location.hash = '#/r/seed-1'");
+  await waitFor("!!document.querySelector('#focus-btn')", '详情页专注按钮');
+  await eval_("document.querySelector('#focus-btn').click()");
+  await waitFor("!!document.querySelector('.focus-view')", '专注模式开启');
+  await check('专注 第1步文本', "document.querySelector('.focus-body p')?.textContent.includes('番茄顶部划十字')");
+  await eval_("document.querySelector('[data-next]').click()");
+  await sleep(200);
+  await check('专注 下一步→第2步', "document.querySelector('.focus-count')?.textContent.includes('第 2 步')");
+  await eval_("document.querySelector('[data-prev]').click()");
+  await sleep(200);
+  await check('专注 上一步→第1步', "document.querySelector('.focus-count')?.textContent.includes('第 1 步')");
+  await eval_("document.querySelector('[data-close]').click()");
+  await sleep(200);
+  await check('专注 退出', "!document.querySelector('.focus-view')");
+  await eval_("location.hash = '#/'");
+  await waitFor("!!document.querySelector('#search')", '回首页');
+
   // 删除
   const rid = await eval_("state.recipes.find(r => r.title === '测试红烧肉').id");
   await eval_(`location.hash = '#/r/${rid}'`);

@@ -903,7 +903,7 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .pick-item.on .ing-check { background: var(--accent); border-color: var(--accent); }
 .pick-item.on .ing-check::after { opacity: 1; }
 
-.shop-tools { display: flex; gap: 16px; }
+.shop-tools, .head-tools { display: flex; gap: 16px; }
 .shop-tools .aux { color: var(--accent); }
 .shop-main { flex: 1; min-width: 0; }
 .shop-note { display: block; color: var(--ink-3); font-size: 12.5px; line-height: 1.5; margin-top: 2px; }
@@ -913,6 +913,27 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .manual-form .name { flex: 1.6; min-width: 0; }
 .manual-form .amt { flex: 1; min-width: 0; }
 .manual-form .btn { flex: none; padding: 0 20px; }
+
+/* ---------- 专注烹饪模式 ---------- */
+.focus-view {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: calc(env(safe-area-inset-top) + 14px) 20px calc(env(safe-area-inset-bottom) + 16px);
+  animation: view-in 0.2s ease both;
+}
+.focus-top { display: flex; align-items: center; gap: 12px; flex: none; }
+.focus-top .icon-btn { width: 38px; height: 38px; font-size: 17px; }
+.focus-count { color: var(--ink-2); font-size: 14px; }
+.focus-body { flex: 1; overflow-y: auto; padding: 22px 2px; -webkit-overflow-scrolling: touch; }
+.focus-body p { font-size: 21px; line-height: 1.9; font-weight: 500; }
+.focus-body img { margin-top: 18px; border-radius: var(--r-md); box-shadow: var(--shadow-sm); }
+.focus-nav { display: flex; gap: 10px; flex: none; }
+.focus-nav .btn { flex: 1; padding: 15px; }
+.focus-nav .btn[disabled] { opacity: 0.4; }
 
 /* ---------- 杂项 ---------- */
 .divider { height: 1px; background: var(--line); margin: 26px 0; }

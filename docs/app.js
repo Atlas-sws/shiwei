@@ -573,7 +573,10 @@ async function renderDetail(id) {
     <section class="section">
       <div class="section-head">
         <h2>步骤</h2>
-        ${'wakeLock' in navigator ? `<button class="aux" id="wake-chip">防熄屏</button>` : ''}
+        <div class="head-tools">
+          <button class="aux" id="focus-btn">专注模式</button>
+          ${'wakeLock' in navigator ? `<button class="aux" id="wake-chip">防熄屏</button>` : ''}
+        </div>
       </div>
       <ol class="steps">
         ${steps.map((s, idx) => `
@@ -617,6 +620,7 @@ async function renderDetail(id) {
     li.classList.toggle('done');
   }));
   $('#wake-chip')?.addEventListener('click', (e) => { e.stopPropagation(); toggleWakeLock(); });
+  $('#focus-btn')?.addEventListener('click', () => openFocusMode(steps));
 
   $('#act-fav').addEventListener('click', async () => {
     r.favorite = !r.favorite;
@@ -652,6 +656,41 @@ async function renderDetail(id) {
       location.hash = '#/';
     }
   });
+}
+// 专注烹饪模式：逐步全屏视图，大字当前步骤 + 上/下一步，进入时自动开防熄屏
+function openFocusMode(steps) {
+  if (!steps.length) return;
+  let idx = 0;
+  const root = $('#dialog-root');
+  const paint = () => {
+    const s = steps[idx];
+    root.innerHTML = `
+      <div class="focus-view">
+        <div class="focus-top">
+          <button class="icon-btn" data-close aria-label="退出专注模式">✕</button>
+          <span class="focus-count">第 ${idx + 1} 步 · 共 ${steps.length} 步</span>
+        </div>
+        <div class="focus-body">
+          ${s.text ? `<p>${esc(s.text)}</p>` : ''}
+          ${s.photo ? `<img data-img-id="${esc(s.photo)}" alt="步骤图">` : ''}
+        </div>
+        <div class="focus-nav">
+          <button class="btn" data-prev ${idx === 0 ? 'disabled' : ''}>上一步</button>
+          <button class="btn primary" data-next>${idx === steps.length - 1 ? '完成' : '下一步'}</button>
+        </div>
+      </div>`;
+    root.querySelector('.focus-view').addEventListener('click', (e) => {
+      if (e.target.closest('[data-close]')) { closeDialog(); updateWakeChip(); }
+      else if (e.target.closest('[data-prev]') && idx > 0) { idx--; paint(); }
+      else if (e.target.closest('[data-next]')) {
+        if (idx < steps.length - 1) { idx++; paint(); }
+        else { closeDialog(); updateWakeChip(); }
+      }
+    });
+    hydrateImages(root);
+  };
+  paint();
+  if ('wakeLock' in navigator && !wakeLock) toggleWakeLock();
 }
 function recipeToText(r) {
   const lines = [`【拾味菜谱】${r.title}`];
