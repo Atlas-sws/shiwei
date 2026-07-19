@@ -868,6 +868,13 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
   text-align: center;
 }
 .toast.show { opacity: 1; transform: none; }
+.toast.tap {
+  pointer-events: auto;
+  cursor: pointer;
+  background: linear-gradient(140deg, var(--accent), var(--accent-deep));
+  color: #fff8f3;
+  font-weight: 600;
+}
 
 /* ---------- 买菜清单 ---------- */
 .top-actions { display: flex; align-items: center; gap: 10px; }

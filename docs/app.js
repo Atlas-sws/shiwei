@@ -133,11 +133,21 @@ async function deleteImage(id) {
   if (imgURLCache.has(id)) { URL.revokeObjectURL(imgURLCache.get(id)); imgURLCache.delete(id); }
   await dbDel('images', id);
 }
+async function hydrateOneImage(img) {
+  const url = await imageURL(img.dataset.imgId);
+  if (url) img.src = url; else img.closest('.card-cover, .hero')?.classList.add('ph');
+}
 function hydrateImages(root = appEl) {
-  $$('[data-img-id]', root).forEach(async (img) => {
-    const url = await imageURL(img.dataset.imgId);
-    if (url) img.src = url; else img.closest('.card-cover, .hero')?.classList.add('ph');
-  });
+  // 懒加载：进入视口前 300px 才解码，菜谱多时首屏更快更省内存；不支持 IO 时退回立即加载
+  const imgs = $$('[data-img-id]', root);
+  if (!imgs.length) return;
+  if (!('IntersectionObserver' in window)) { imgs.forEach(hydrateOneImage); return; }
+  const io = new IntersectionObserver((entries) => {
+    for (const en of entries) {
+      if (en.isIntersecting) { io.unobserve(en.target); hydrateOneImage(en.target); }
+    }
+  }, { rootMargin: '300px' });
+  imgs.forEach((img) => io.observe(img));
 }
 function pickImageFile(cb) {
   const input = document.createElement('input');
@@ -232,6 +242,7 @@ const state = {
   query: '',
   tag: null,
   favOnly: false,
+  special: null, // null | 'most'(最常做) | 'recent'(最近做过)
   checked: {},   // recipeId -> Set(配料下标)
   stepDone: {},  // recipeId -> Set(步骤下标)
   homeScroll: 0,
@@ -243,8 +254,10 @@ async function loadRecipes() {
 }
 function filteredRecipes() {
   const q = state.query.trim().toLowerCase();
-  return state.recipes.filter((r) => {
+  const list = state.recipes.filter((r) => {
     if (state.favOnly && !r.favorite) return false;
+    if (state.special === 'most' && !r.cookCount) return false;
+    if (state.special === 'recent' && !r.lastCookedAt) return false;
     if (state.tag && !r.tags.includes(state.tag)) return false;
     if (q) {
       const hay = [r.title, ...r.tags, ...r.ingredients.map((i) => i.name)].join(' ').toLowerCase();
@@ -252,6 +265,9 @@ function filteredRecipes() {
     }
     return true;
   });
+  if (state.special === 'most') list.sort((a, b) => (b.cookCount || 0) - (a.cookCount || 0));
+  else if (state.special === 'recent') list.sort((a, b) => (b.lastCookedAt || 0) - (a.lastCookedAt || 0));
+  return list;
 }
 function collectTags() {
   const count = new Map();
@@ -284,6 +300,15 @@ function toast(msg) {
   $('#toast-root').append(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 320); }, 2300);
+}
+function updateReadyToast() {
+  const el = document.createElement('div');
+  el.className = 'toast tap';
+  el.textContent = '拾味有新版本，点此立即更新';
+  el.addEventListener('click', () => location.reload());
+  $('#toast-root').append(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 320); }, 12000);
 }
 function closeDialog() {
   const root = $('#dialog-root');
@@ -366,6 +391,28 @@ function isStandalone() {
 function isIOS() {
   return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
+// 备份提醒：有自建菜谱、且自上次备份后有变动、且距上次备份/提醒足够久，才温和提示一次
+const DAY = 86400e3;
+function backupReminderDue(now = Date.now()) {
+  const own = state.recipes.filter((r) => !r.id.startsWith('seed-'));
+  if (!own.length) return false;
+  const oldest = Math.min(...own.map((r) => r.createdAt || now));
+  if (now - oldest < 3 * DAY) return false;                    // 新用户先安静几天
+  const newest = Math.max(...own.map((r) => r.updatedAt || 0));
+  const lastBackup = +safeLS.get('lastBackupAt') || 0;
+  if (newest <= lastBackup) return false;                      // 备份后没有新变动
+  if (now - lastBackup < 14 * DAY) return false;               // 备份还新鲜
+  if (now - (+safeLS.get('backupNagAt') || 0) < 7 * DAY) return false; // 刚提醒过
+  return true;
+}
+function backupTipHTML() {
+  if (!backupReminderDue()) return '';
+  return `
+    <div class="install-tip" id="backup-tip">
+      <div>🛟 <b>该备份了：</b>菜谱有新变动且许久没导出备份。建议去<a href="#/settings"><b>「设置 → 导出全部菜谱」</b></a>存一份，防止系统清理数据。</div>
+      <button class="close" data-close-backup aria-label="关闭">✕</button>
+    </div>`;
+}
 function installTipHTML() {
   if (!isIOS() || isStandalone() || safeLS.get('installTipDismissed')) return '';
   return `
@@ -402,9 +449,14 @@ function chipsHTML() {
   const tags = collectTags();
   const chip = (label, on, data, extra = '') =>
     `<button class="chip ${on ? 'on' : ''}" ${data}>${label}${extra}</button>`;
+  const cooked = state.recipes.some((r) => r.cookCount > 0);
   return [
-    chip('全部', !state.tag && !state.favOnly, 'data-all'),
+    chip('全部', !state.tag && !state.favOnly && !state.special, 'data-all'),
     chip('★ 收藏', state.favOnly, 'data-fav'),
+    ...(cooked ? [
+      chip('🔥 最常做', state.special === 'most', 'data-most'),
+      chip('🕘 最近做过', state.special === 'recent', 'data-recent')
+    ] : []),
     ...tags.map(([t, n]) => chip(esc(t), state.tag === t, `data-tag="${esc(t)}"`, ` <span class="n">${n}</span>`))
   ].join('');
 }
@@ -423,6 +475,7 @@ function renderHome() {
       </div>
     </header>
     ${installTipHTML()}
+    ${backupTipHTML()}
     <div class="search-wrap">
       ${ICONS.search}
       <input id="search" type="search" autocomplete="off" placeholder="搜菜名、食材、标签" value="${esc(state.query)}">
@@ -450,9 +503,11 @@ function renderHome() {
   $('#chips').addEventListener('click', (e) => {
     const btn = e.target.closest('.chip');
     if (!btn) return;
-    if (btn.hasAttribute('data-all')) { state.tag = null; state.favOnly = false; }
-    else if (btn.hasAttribute('data-fav')) { state.favOnly = !state.favOnly; state.tag = null; }
-    else { const t = btn.dataset.tag; state.tag = state.tag === t ? null : t; state.favOnly = false; }
+    if (btn.hasAttribute('data-all')) { state.tag = null; state.favOnly = false; state.special = null; }
+    else if (btn.hasAttribute('data-fav')) { state.favOnly = !state.favOnly; state.tag = null; state.special = null; }
+    else if (btn.hasAttribute('data-most')) { state.special = state.special === 'most' ? null : 'most'; state.tag = null; state.favOnly = false; }
+    else if (btn.hasAttribute('data-recent')) { state.special = state.special === 'recent' ? null : 'recent'; state.tag = null; state.favOnly = false; }
+    else { const t = btn.dataset.tag; state.tag = state.tag === t ? null : t; state.favOnly = false; state.special = null; }
     $('#chips').innerHTML = chipsHTML();
     refreshGrid();
   });
@@ -460,6 +515,11 @@ function renderHome() {
   if (tip) tip.querySelector('[data-close-tip]').addEventListener('click', () => {
     safeLS.set('installTipDismissed', '1');
     tip.remove();
+  });
+  const bkTip = $('#backup-tip');
+  if (bkTip) bkTip.querySelector('[data-close-backup]').addEventListener('click', () => {
+    safeLS.set('backupNagAt', String(Date.now()));
+    bkTip.remove();
   });
   requestAnimationFrame(() => window.scrollTo(0, state.homeScroll || 0));
 }
@@ -1050,14 +1110,18 @@ async function exportAll() {
     const fileName = `拾味备份-${date}.json`;
     const file = new File([payload], fileName, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: '拾味菜谱备份' }); return; }
-      catch (e) { if (e && e.name === 'AbortError') return; }
+      try {
+        await navigator.share({ files: [file], title: '拾味菜谱备份' });
+        safeLS.set('lastBackupAt', String(Date.now()));
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') return; }
     }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
     a.download = fileName;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    safeLS.set('lastBackupAt', String(Date.now()));
     toast('备份文件已生成');
   } catch (e) {
     toast('导出失败：' + (e && e.message ? e.message : e));
@@ -1401,7 +1465,16 @@ document.addEventListener('visibilitychange', () => {
     document.documentElement.setAttribute('data-app-ready', '1');
     if (memMode) console.warn('拾味：IndexedDB 不可用，已进入内存演示模式');
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname))) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        // 新 SW 装好且已有旧版在控制页面 = 有更新待生效，提示用户一键刷新
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) updateReadyToast();
+          });
+        });
+      }).catch(() => {});
     }
   } catch (err) {
     document.documentElement.setAttribute('data-app-error', String(err));

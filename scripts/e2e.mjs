@@ -117,6 +117,17 @@ try {
   await sleep(300);
   await check('收藏筛选命中1条', "document.querySelectorAll('#grid-area .card').length === 1");
 
+  // 统计 chips：做过的菜（cookCount=1）→ 最常做命中
+  await eval_("document.querySelector('[data-most]').click()");
+  await sleep(300);
+  await check('最常做筛选命中1条', "document.querySelectorAll('#grid-area .card').length === 1");
+  await eval_("document.querySelector('[data-most]').click()");
+  await sleep(300);
+
+  // 备份提醒（纯函数，注入不同 now）
+  await check('备份提醒 新用户静默', "backupReminderDue(Date.now()) === false");
+  await check('备份提醒 久未备份触发', "backupReminderDue(Date.now() + 15 * 86400e3) === true");
+
   // 删除
   const rid = await eval_("state.recipes.find(r => r.title === '测试红烧肉').id");
   await eval_(`location.hash = '#/r/${rid}'`);
