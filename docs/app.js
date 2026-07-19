@@ -32,6 +32,7 @@ const ICONS = {
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.5"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12L8 7m4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>',
   cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h1.7l1.6 9.4a1.5 1.5 0 0 0 1.5 1.2h6.8a1.5 1.5 0 0 0 1.5-1.2L19 8H6.3"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="16.5" cy="19.5" r="1.3"/></svg>',
+  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13.5h3m3 0h3m-9 3.5h3"/></svg>',
   chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="16" height="16"><path d="m9 5 7 7-7 7"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2m0 15v2m9.5-9.5h-2m-15 0h-2m16.2-6.7-1.4 1.4M6.7 17.3l-1.4 1.4m0-13.4 1.4 1.4m10.6 10.6 1.4 1.4"/></svg>',
   emptyBowl: '<svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M38 16c-3 5 3 8 0 13M50 12c-3 5 3 8 0 13M62 16c-3 5 3 8 0 13"/><path d="M16 46h64c0 13-8 22-17 26l-2 8H35l-2-8c-9-4-17-13-17-26z"/><path d="M30 56c2 5 6 9 10 11"/></svg>'
@@ -470,6 +471,7 @@ function renderHome() {
         <div><h1>拾味</h1><p class="sub">${n ? `已收录 ${n} 道菜` : '私人菜谱手册'}</p></div>
       </div>
       <div class="top-actions">
+        <a class="icon-btn" href="#/plan" aria-label="周菜单">${ICONS.calendar}</a>
         <a class="icon-btn" href="#/shop" aria-label="买菜清单">${ICONS.cart}</a>
         <a class="icon-btn" href="#/settings" aria-label="设置">${ICONS.settings}</a>
       </div>
@@ -1468,6 +1470,112 @@ async function renderShop() {
 }
 
 /* ==========================================================================
+   视图：周菜单（固定周一~周日循环周，不绑日期）
+   ========================================================================== */
+const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+async function getWeekPlan() {
+  const rec = await dbGet('meta', 'weekPlan');
+  const v = (rec && rec.value) || {};
+  const days = Array.isArray(v.days) ? v.days : [];
+  return WEEKDAYS.map((_, i) => (Array.isArray(days[i]) ? days[i].filter((id) => typeof id === 'string') : []));
+}
+async function saveWeekPlan(days) {
+  await dbPut('meta', { key: 'weekPlan', value: { days } });
+}
+async function mergeIntoShoppingList(ids) {
+  const sl = await getShoppingList();
+  const merged = [...new Set([...sl.recipeIds, ...ids])];
+  await saveShoppingList(merged, sl.checked, sl.manualItems);
+}
+
+async function renderPlan() {
+  document.title = '周菜单 · 拾味';
+  let days = await getWeekPlan();
+  const valid = new Set(state.recipes.map((r) => r.id));
+  const cleaned = days.map((d) => d.filter((id) => valid.has(id)));
+  if (JSON.stringify(cleaned) !== JSON.stringify(days)) { days = cleaned; await saveWeekPlan(days); }
+
+  appEl.innerHTML = `
+    <div class="page-top">
+      <a class="icon-btn" href="#/" aria-label="返回">${ICONS.back}</a>
+      <h1>周菜单</h1>
+    </div>
+    <section class="section" style="margin-top:6px">
+      <div class="section-head">
+        <h2>本周吃什么</h2>
+        <div class="head-tools">
+          <button class="aux" id="plan-shop">整周并入买菜</button>
+          <button class="aux" id="plan-clear">清空</button>
+        </div>
+      </div>
+      <div id="plan-days"></div>
+    </section>`;
+
+  const daysEl = $('#plan-days');
+  const persist = () => saveWeekPlan(days);
+
+  function paint() {
+    const map = new Map(state.recipes.map((r) => [r.id, r]));
+    daysEl.innerHTML = days.map((list, di) => `
+      <div class="plan-day">
+        <div class="plan-day-head">
+          <span class="plan-day-name">${WEEKDAYS[di]}</span>
+          <div class="head-tools">
+            ${list.length ? `<button class="aux" data-day-shop="${di}">送入买菜</button>` : ''}
+            <button class="aux" data-day-add="${di}">＋ 添加</button>
+          </div>
+        </div>
+        ${list.length ? `<ul class="plan-list">${list.map((id, i) => {
+          const r = map.get(id);
+          return `<li class="plan-item"><a href="#/r/${esc(id)}">${esc(r ? r.title : '')}</a><button class="row-x" data-rm="${di}:${i}" aria-label="移除">✕</button></li>`;
+        }).join('')}</ul>` : `<p class="plan-empty">还没安排</p>`}
+      </div>`).join('');
+  }
+  paint();
+
+  daysEl.addEventListener('click', async (e) => {
+    const add = e.target.closest('[data-day-add]');
+    const rm = e.target.closest('[data-rm]');
+    const dayShop = e.target.closest('[data-day-shop]');
+    if (add) {
+      if (!state.recipes.length) { toast('先去记几道菜吧'); return; }
+      const di = +add.dataset.dayAdd;
+      const key = await actionSheet(state.recipes.map((r) => ({ key: r.id, label: r.title })));
+      if (!key) return;
+      if (days[di].includes(key)) { toast('这天已经安排了这道菜'); return; }
+      days[di].push(key);
+      await persist();
+      paint();
+    } else if (rm) {
+      const [di, i] = rm.dataset.rm.split(':').map(Number);
+      days[di].splice(i, 1);
+      await persist();
+      paint();
+    } else if (dayShop) {
+      const di = +dayShop.dataset.dayShop;
+      if (!days[di].length) return;
+      await mergeIntoShoppingList(days[di]);
+      toast(`${WEEKDAYS[di]}的菜已并入买菜清单`);
+    }
+  });
+
+  $('#plan-shop').addEventListener('click', async () => {
+    const all = [...new Set(days.flat())];
+    if (!all.length) { toast('本周还没安排菜'); return; }
+    await mergeIntoShoppingList(all);
+    toast('整周的菜已并入买菜清单');
+  });
+  $('#plan-clear').addEventListener('click', async () => {
+    if (!days.some((d) => d.length)) { toast('周菜单已经是空的'); return; }
+    const ok = await confirmDialog({ title: '清空周菜单？', body: '只清空排菜安排，菜谱与买菜清单不受影响。', okText: '清空' });
+    if (!ok) return;
+    days = WEEKDAYS.map(() => []);
+    await persist();
+    paint();
+  });
+}
+
+/* ==========================================================================
    路由与启动
    ========================================================================== */
 function route() {
@@ -1483,6 +1591,7 @@ function route() {
   else if (h === '#/new') renderEdit(null);
   else if ((m = h.match(/^#\/edit\/(.+)$/))) renderEdit(decodeURIComponent(m[1]));
   else if (h === '#/shop') renderShop();
+  else if (h === '#/plan') renderPlan();
   else if (h === '#/settings') renderSettings();
   else renderHome();
   if (h !== '#/') window.scrollTo(0, 0);

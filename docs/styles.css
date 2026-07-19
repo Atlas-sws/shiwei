@@ -914,6 +914,29 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .manual-form .amt { flex: 1; min-width: 0; }
 .manual-form .btn { flex: none; padding: 0 20px; }
 
+/* ---------- 周菜单 ---------- */
+.plan-day {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  padding: 12px 16px 10px;
+  margin-bottom: 12px;
+}
+.plan-day-head { display: flex; align-items: center; justify-content: space-between; }
+.plan-day-name { font-family: var(--serif); font-weight: 700; font-size: 16px; letter-spacing: 0.05em; }
+.plan-empty { color: var(--ink-3); font-size: 13px; padding: 4px 0 2px; }
+.plan-list { margin-top: 2px; }
+.plan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.plan-item:last-child { border-bottom: none; }
+.plan-item a { flex: 1; min-width: 0; font-size: 15px; }
+
 /* ---------- 专注烹饪模式 ---------- */
 .focus-view {
   position: fixed;

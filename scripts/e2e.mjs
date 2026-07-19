@@ -216,6 +216,19 @@ try {
   await waitFor("[...document.querySelectorAll('#manual-list .shop-item')].every(li => li.querySelector('.ing-name').textContent !== '垃圾袋')", '手动项已删除');
   await check('删除后持久化清除', "dbGet('meta','shoppingList').then(r => !!r && !(r.value.manualItems || []).some(m => m.name === '垃圾袋'))");
 
+  // 周菜单：添加 → 持久化 → 整周并入买菜（并保留买菜页原有已选）
+  await eval_("location.hash = '#/plan'");
+  await waitFor("document.querySelectorAll('.plan-day').length === 7", '周菜单页7天');
+  await eval_("document.querySelector('[data-day-add=\"0\"]').click()");
+  await waitFor("!!document.querySelector('[data-key=\"seed-3\"]')", '选菜面板');
+  await eval_("document.querySelector('[data-key=\"seed-3\"]').click()");
+  await waitFor("dbGet('meta','weekPlan').then(r => !!r && r.value.days[0].includes('seed-3'))", '周一持久化');
+  await check('周一显示紫菜蛋花汤', "[...document.querySelectorAll('.plan-item a')].some(a => a.textContent === '紫菜蛋花汤')");
+  await eval_("document.querySelector('#plan-shop').click()");
+  await waitFor("dbGet('meta','shoppingList').then(r => !!r && r.value.recipeIds.includes('seed-3'))", '整周并入买菜');
+  passed++; console.log('PASS 周菜单整周并入买菜');
+  await check('并入保留原有已选', "dbGet('meta','shoppingList').then(r => r.value.recipeIds.includes('seed-1') && r.value.recipeIds.includes('seed-2'))");
+
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   if (exceptions.length) console.log('PAGE EXCEPTIONS:\n' + exceptions.join('\n'));
   process.exitCode = failed || exceptions.length ? 1 : 0;

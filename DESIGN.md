@@ -28,7 +28,9 @@
 - [x] GitHub Pages 已部署（2026-07-08）：**<https://atlas-sws.github.io/shiwei/>**（仓库 <https://github.com/Atlas-sws/shiwei>，公开可见性经用户确认；线上 e2e 9 项全过）
 - [x] **买菜清单 v1（2026-07-09）**：选菜 → 聚合配料 → 可勾选清单，专用 `#/shop` 页；含「常备调料」自动分栏、手动添加项。见 [adr/0002](adr/0002-shopping-list-amount-aggregation.md)、[adr/0003](adr/0003-shopping-list-single-persisted.md)、[adr/0004](adr/0004-shopping-list-staple-section.md)、[adr/0005](adr/0005-shopping-list-manual-items.md)
 - AI 实时语音助手：搁置（与离线/零成本根基冲突），见 [adr/0001](adr/0001-defer-ai-voice-assistant.md)
-- 未来可选：从网页链接导入菜谱、份量换算、周菜单计划
+- [x] **体验优化批次（2026-07-09）**：图片懒加载 / SW 新版更新提示 / 备份提醒 / 🔥最常做·🕘最近做过筛选 / 专注烹饪模式（逐步全屏）
+- [x] **周菜单计划（2026-07-09）**：固定周一~周日循环表 `#/plan`，整周/单日一键并入买菜清单。见 [adr/0006](adr/0006-week-plan-rotating.md)
+- 未来可选：从网页链接导入菜谱、份量换算
 
 ## 通用语言 / 设计决策
 
