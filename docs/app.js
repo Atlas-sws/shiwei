@@ -134,6 +134,11 @@ async function deleteImage(id) {
   if (imgURLCache.has(id)) { URL.revokeObjectURL(imgURLCache.get(id)); imgURLCache.delete(id); }
   await dbDel('images', id);
 }
+async function deleteRecipeWithImages(r) {
+  await deleteImage(r.cover);
+  for (const s of r.steps) await deleteImage(s.photo);
+  await dbDel('recipes', r.id);
+}
 async function hydrateOneImage(img) {
   const url = await imageURL(img.dataset.imgId);
   if (url) img.src = url; else img.closest('.card-cover, .hero')?.classList.add('ph');
@@ -150,15 +155,16 @@ function hydrateImages(root = appEl) {
   }, { rootMargin: '300px' });
   imgs.forEach((img) => io.observe(img));
 }
-function pickImageFile(cb) {
+function pickFile(accept, cb) {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = 'image/*';
+  input.accept = accept;
   input.hidden = true;
   document.body.append(input);
   input.addEventListener('change', () => { const f = input.files && input.files[0]; input.remove(); if (f) cb(f); });
   input.click();
 }
+const pickImageFile = (cb) => pickFile('image/*', cb);
 
 /* ---------- 数据模型 ---------- */
 function normalizeRecipe(r) {
@@ -650,9 +656,7 @@ async function renderDetail(id) {
     } else if (key === 'del') {
       const ok = await confirmDialog({ title: `删除「${r.title}」？`, body: '删除后无法恢复（除非你有备份文件）。', okText: '删除', danger: true });
       if (!ok) return;
-      await deleteImage(r.cover);
-      for (const s of r.steps) await deleteImage(s.photo);
-      await dbDel('recipes', r.id);
+      await deleteRecipeWithImages(r);
       await loadRecipes();
       toast('已删除');
       location.hash = '#/';
@@ -728,6 +732,12 @@ function renderEdit(id) {
   const newImages = new Set();
   const removedImages = new Set();
   const backHref = src ? `#/r/${src.id}` : '#/';
+  // 释放草稿引用的图片：本次新传的直接删库；原有的先记账，保存时才真正删除
+  async function releaseDraftImage(id) {
+    if (!id) return;
+    if (newImages.has(id)) { await deleteImage(id); newImages.delete(id); }
+    else removedImages.add(id);
+  }
 
   appEl.innerHTML = `
     <div class="form-top">
@@ -799,10 +809,7 @@ function renderEdit(id) {
   const coverPick = $('#cover-pick');
   async function setCover(file) {
     const newId = await saveImageFile(file, 1440);
-    if (draft.cover) {
-      if (newImages.has(draft.cover)) { await deleteImage(draft.cover); newImages.delete(draft.cover); }
-      else removedImages.add(draft.cover);
-    }
+    await releaseDraftImage(draft.cover);
     draft.cover = newId;
     newImages.add(newId);
     coverPick.classList.add('has');
@@ -814,10 +821,7 @@ function renderEdit(id) {
   }
   coverPick.addEventListener('click', async (e) => {
     if (e.target.id === 'cover-remove') {
-      if (draft.cover) {
-        if (newImages.has(draft.cover)) { await deleteImage(draft.cover); newImages.delete(draft.cover); }
-        else removedImages.add(draft.cover);
-      }
+      await releaseDraftImage(draft.cover);
       draft.cover = null;
       coverPick.classList.remove('has');
       coverPick.querySelector('img')?.remove();
@@ -926,10 +930,7 @@ function renderEdit(id) {
         if (i < draft.steps.length - 1) { [draft.steps[i + 1], draft.steps[i]] = [draft.steps[i], draft.steps[i + 1]]; rebuildSteps(); }
       });
       el.querySelector('[data-del]').addEventListener('click', async () => {
-        if (row.photo) {
-          if (newImages.has(row.photo)) { await deleteImage(row.photo); newImages.delete(row.photo); }
-          else removedImages.add(row.photo);
-        }
+        await releaseDraftImage(row.photo);
         draft.steps.splice(draft.steps.indexOf(row), 1);
         if (!draft.steps.length) draft.steps.push({ text: '', photo: null });
         rebuildSteps();
@@ -945,8 +946,7 @@ function renderEdit(id) {
         });
       });
       el.querySelector('[data-del-photo]')?.addEventListener('click', async () => {
-        if (newImages.has(row.photo)) { await deleteImage(row.photo); newImages.delete(row.photo); }
-        else removedImages.add(row.photo);
+        await releaseDraftImage(row.photo);
         row.photo = null;
         rebuildSteps();
       });
@@ -1007,7 +1007,7 @@ function renderEdit(id) {
    ========================================================================== */
 async function renderSettings() {
   document.title = '设置 · 拾味';
-  const hasSeeds = state.recipes.some((r) => r.id.startsWith('seed-'));
+  const seedCount = state.recipes.filter((r) => r.id.startsWith('seed-')).length;
   appEl.innerHTML = `
     <div class="page-top">
       <a class="icon-btn" href="#/" aria-label="返回">${ICONS.back}</a>
@@ -1045,10 +1045,10 @@ async function renderSettings() {
     <div class="group">
       <p class="group-title">整理</p>
       <div class="group-card">
-        ${hasSeeds ? `
+        ${seedCount ? `
         <button class="set-row" id="s-seeds">
           <span class="ic">${ICONS.trash}</span>
-          <span class="grow">移除示例菜谱<span class="desc">删除自带的 ${state.recipes.filter((r) => r.id.startsWith('seed-')).length} 道示例</span></span>
+          <span class="grow">移除示例菜谱<span class="desc">删除自带的 ${seedCount} 道示例</span></span>
         </button>` : ''}
         <button class="set-row danger" id="s-wipe">
           <span class="ic">${ICONS.trash}</span>
@@ -1085,23 +1085,13 @@ async function renderSettings() {
   });
 
   $('#s-export').addEventListener('click', exportAll);
-  $('#s-import').addEventListener('click', () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/json,.json';
-    input.hidden = true;
-    document.body.append(input);
-    input.addEventListener('change', () => { const f = input.files && input.files[0]; input.remove(); if (f) importBackup(f); });
-    input.click();
-  });
+  $('#s-import').addEventListener('click', () => pickFile('application/json,.json', importBackup));
 
   $('#s-seeds')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: '移除示例菜谱？', body: '自带的示例菜谱将被删除，你自己记录的菜谱不受影响。', okText: '移除' });
     if (!ok) return;
     for (const r of state.recipes.filter((x) => x.id.startsWith('seed-'))) {
-      await deleteImage(r.cover);
-      for (const s of r.steps) await deleteImage(s.photo);
-      await dbDel('recipes', r.id);
+      await deleteRecipeWithImages(r);
     }
     await loadRecipes();
     toast('示例已移除');
