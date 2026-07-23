@@ -312,6 +312,19 @@ ul, ol { list-style: none; }
   background: linear-gradient(150deg, hsl(var(--ph) 46% var(--ph-l)), hsl(var(--ph) var(--ph-s) calc(var(--ph-l) - 11%)));
   aspect-ratio: auto;
   height: 190px;
+  display: grid;
+  place-items: center;
+}
+/* 无封面时的大字水印，与首页卡片占位保持同一套语言 */
+.hero-char {
+  font-family: var(--serif);
+  font-size: 86px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.3;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .hero.ph::after {
   content: "";
@@ -341,7 +354,7 @@ ul, ol { list-style: none; }
   -webkit-backdrop-filter: blur(8px);
   z-index: 5;
 }
-.hero.ph .float-btn { background: rgba(22, 14, 7, 0.24); }
+.hero.ph .float-btn { background: rgba(22, 14, 7, 0.42); }
 .float-btn svg { width: 20px; height: 20px; }
 .float-btn.back { left: 14px; }
 .float-btn:active { transform: scale(0.92); }
@@ -359,18 +372,18 @@ ul, ol { list-style: none; }
   gap: 7px;
   margin-top: 12px;
 }
+/* 统一为「无边框实心药丸」：信息 chip 用下沉底，标签 chip 用赭陶浅底 */
 .meta-chip {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font-size: 12.5px;
   color: var(--ink-2);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  padding: 5px 12px;
+  background: var(--bg-sunken);
+  padding: 6px 13px;
   border-radius: 999px;
 }
-.meta-chip.tag { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.meta-chip.tag { color: var(--accent); background: var(--accent-soft); }
 .meta-chip svg { width: 13px; height: 13px; }
 .intro {
   margin-top: 16px;
@@ -405,6 +418,13 @@ ul, ol { list-style: none; }
 }
 .section-head .aux { font-size: 12.5px; color: var(--ink-3); }
 .section-head button.aux { color: var(--accent); }
+/* 主动作（进入专注模式）给药丸底，与旁边的纯文字开关拉开主次 */
+.section-head button.aux.primary-aux {
+  background: var(--accent-soft);
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-weight: 600;
+}
 
 /* 配料清单 */
 .ing-list {
@@ -485,8 +505,10 @@ ul, ol { list-style: none; }
 /* 小贴士 */
 .tips-card {
   background: var(--bg-elev);
-  border: 1px dashed var(--gold);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--gold);
   border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
   padding: 14px 16px;
   font-size: 14.5px;
   line-height: 1.85;
@@ -560,7 +582,9 @@ ul, ol { list-style: none; }
 }
 .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .input::placeholder, textarea.input::placeholder { color: var(--ink-3); font-weight: 400; font-family: var(--sans); }
-textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
+/* autogrow 会自动撑高，滚动条只会留下一道脏痕，隐藏之 */
+textarea.input { resize: none; line-height: 1.7; min-height: 46px; scrollbar-width: none; }
+textarea.input::-webkit-scrollbar { display: none; }
 .input.title-input { font-family: var(--serif); font-size: 19px; font-weight: 700; }
 .field .hint { font-size: 12px; color: var(--ink-3); margin-top: 5px; }
 
@@ -570,9 +594,9 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 /* 封面选择 */
 .cover-pick {
   position: relative;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 2.5 / 1;
   border-radius: var(--r-md);
-  border: 1.5px dashed var(--ink-3);
+  border: 1.5px dashed var(--line);
   background: var(--bg-elev);
   display: grid;
   place-items: center;
@@ -580,7 +604,7 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
   overflow: hidden;
   cursor: pointer;
 }
-.cover-pick.has { border-style: solid; border-color: var(--line); }
+.cover-pick.has { aspect-ratio: 16 / 9; border-style: solid; border-color: var(--line); }
 .cover-pick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .cover-pick .ph-inner { text-align: center; font-size: 13.5px; }
 .cover-pick .ph-inner svg { width: 30px; height: 30px; margin: 0 auto 6px; }
@@ -605,6 +629,7 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .segmented {
   display: flex;
   background: var(--bg-sunken);
+  border: 1px solid var(--line);
   border-radius: var(--r-sm);
   padding: 3px;
   gap: 3px;
@@ -614,11 +639,13 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
   padding: 9px 4px;
   border-radius: 8px;
   font-size: 14px;
-  color: var(--ink-2);
+  color: var(--ink-3);
+  transition: color 0.15s;
 }
+/* 选中态给赭陶实底，弱化的未选态形成明确对比，一眼能认出这是个可切换控件 */
 .segmented button.on {
-  background: var(--bg-elev);
-  color: var(--ink);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
@@ -697,7 +724,7 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
   padding: 5px 8px 5px 12px;
   border-radius: 999px;
 }
-.tag-pill button { color: inherit; font-size: 15px; line-height: 1; opacity: 0.7; }
+.tag-pill button { color: inherit; font-size: 11px; line-height: 1; opacity: 0.5; margin-left: 3px; }
 .tag-editor input {
   flex: 1;
   min-width: 110px;
@@ -778,7 +805,7 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
 .set-row {
   width: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
@@ -786,10 +813,11 @@ textarea.input { resize: none; line-height: 1.7; min-height: 46px; }
   font-size: 15.5px;
 }
 .set-row:last-child { border-bottom: none; }
-.set-row .ic { flex: none; width: 22px; height: 22px; color: var(--accent); }
+/* 图标与标题首行基线对齐，描述换行时不再下沉 */
+.set-row .ic { flex: none; width: 22px; height: 22px; margin-top: 2px; color: var(--accent); }
 .set-row .grow { flex: 1; min-width: 0; }
 .set-row .desc { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; line-height: 1.5; }
-.set-row .chev { color: var(--ink-3); flex: none; }
+.set-row .chev { color: var(--ink-3); flex: none; margin-top: 3px; }
 .set-row.danger .ic, .set-row.danger { color: var(--danger); }
 .about {
   text-align: center;

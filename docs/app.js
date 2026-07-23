@@ -38,6 +38,9 @@ const ICONS = {
   emptyBowl: '<svg viewBox="0 0 96 96" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M38 16c-3 5 3 8 0 13M50 12c-3 5 3 8 0 13M62 16c-3 5 3 8 0 13"/><path d="M16 46h64c0 13-8 22-17 26l-2 8H35l-2-8c-9-4-17-13-17-26z"/><path d="M30 56c2 5 6 9 10 11"/></svg>'
 };
 
+// 展示用版本号；改动发布时与 docs/sw.js 的 VERSION 一同更新
+const APP_VERSION = 'v1.5';
+
 /* ---------- 本地存储层（IndexedDB，失败时退化为内存模式） ---------- */
 const DB_NAME = 'shiwei';
 let _db = null;
@@ -547,7 +550,7 @@ async function renderDetail(id) {
 
   const hero = r.cover
     ? `<div class="hero" style="--ph:${phHue(r)}"><img data-img-id="${esc(r.cover)}" alt=""><a class="float-btn back" href="#/" aria-label="返回">${ICONS.back}</a></div>`
-    : `<div class="hero ph" style="--ph:${phHue(r)}"><a class="float-btn back" href="#/" aria-label="返回">${ICONS.back}</a></div>`;
+    : `<div class="hero ph" style="--ph:${phHue(r)}"><span class="hero-char">${esc(r.title.slice(0, 1))}</span><a class="float-btn back" href="#/" aria-label="返回">${ICONS.back}</a></div>`;
 
   const meta = [];
   if (r.timeMinutes) meta.push(`<span class="meta-chip">${ICONS.clock}${fmtTime(r.timeMinutes)}</span>`);
@@ -585,7 +588,7 @@ async function renderDetail(id) {
       <div class="section-head">
         <h2>步骤</h2>
         <div class="head-tools">
-          <button class="aux" id="focus-btn">专注模式</button>
+          <button class="aux primary-aux" id="focus-btn">专注模式</button>
           ${'wakeLock' in navigator ? `<button class="aux" id="wake-chip">防熄屏</button>` : ''}
         </div>
       </div>
@@ -1059,7 +1062,7 @@ async function renderSettings() {
     </div>
     <div class="about">
       <p class="brand-mini">拾 味</p>
-      <p>v1.0 · 所有数据只保存在这台设备上<br>不联网、无账号、不上传任何内容</p>
+      <p>${APP_VERSION} · 所有数据只保存在这台设备上<br>不联网、无账号、不上传任何内容</p>
     </div>`;
 
   if (navigator.storage && navigator.storage.estimate) {

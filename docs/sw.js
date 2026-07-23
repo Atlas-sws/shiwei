@@ -1,5 +1,5 @@
 /* 拾味 Service Worker —— 应用壳整体离线缓存 */
-const VERSION = 'shiwei-v1.4.0';
+const VERSION = 'shiwei-v1.5.0';
 const ASSETS = [
   './',
   './index.html',
