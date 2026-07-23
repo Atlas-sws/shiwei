@@ -985,9 +985,7 @@ function renderEdit(id) {
       if (extra && !draft.tags.includes(extra) && draft.tags.length < 10) draft.tags.push(extra);
     }
     draft.ingredients = draft.ingredients.filter((i) => i.name.trim());
-    for (const s of draft.steps) {
-      if (!s.text.trim() && s.photo && newImages.has(s.photo)) { await deleteImage(s.photo); newImages.delete(s.photo); s.photo = null; }
-    }
+    // 有文字或有配图即为有效步骤；纯配图步骤同样保留（新旧图一视同仁）
     draft.steps = draft.steps.filter((s) => s.text.trim() || s.photo);
     draft.updatedAt = Date.now();
     await dbPut('recipes', normalizeRecipe(draft));

@@ -3,7 +3,7 @@
 import { spawn } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const url = process.argv[2] || 'http://localhost:8173/';
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
@@ -228,6 +228,22 @@ try {
   await waitFor("dbGet('meta','shoppingList').then(r => !!r && r.value.recipeIds.includes('seed-3'))", '整周并入买菜');
   passed++; console.log('PASS 周菜单整周并入买菜');
   await check('并入保留原有已选', "dbGet('meta','shoppingList').then(r => r.value.recipeIds.includes('seed-1') && r.value.recipeIds.includes('seed-2'))");
+
+  // 回归：只有配图、没有文字的步骤，保存后必须保留（曾被矛盾逻辑静默丢弃）
+  await eval_("location.hash = '#/new'");
+  await waitFor("!!document.querySelector('#f-title')", '新建表单');
+  await eval_("document.querySelector('#f-title').value = '图片步骤测试'");
+  await eval_("document.querySelector('#step-rows [data-add-photo]').click()");
+  await send('DOM.enable', {}, sessionId);
+  const domDoc = await send('DOM.getDocument', {}, sessionId);
+  const fileNode = await send('DOM.querySelector', { nodeId: domDoc.root.nodeId, selector: 'input[type="file"]' }, sessionId);
+  await send('DOM.setFileInputFiles', { files: [resolve('docs/icons/icon-192.png')], nodeId: fileNode.nodeId }, sessionId);
+  await waitFor("!!document.querySelector('#step-rows img[data-img-id]')", '步骤配图已附加');
+  await eval_("document.querySelector('#btn-save').click()");
+  await waitFor("location.hash.startsWith('#/r/')", '保存并跳转');
+  await check('纯配图步骤被保留', "(() => { const r = state.recipes.find(x => x.title === '图片步骤测试'); return !!r && r.steps.length === 1 && !!r.steps[0].photo && r.steps[0].text === ''; })()");
+  await eval_("(async () => { const r = state.recipes.find(x => x.title === '图片步骤测试'); await deleteRecipeWithImages(r); await loadRecipes(); })()");
+  await check('删除后图片库无残留', "dbGetAll('images').then(a => a.length === 0)");
 
   console.log(`\nRESULT: ${passed} passed, ${failed} failed`);
   if (exceptions.length) console.log('PAGE EXCEPTIONS:\n' + exceptions.join('\n'));
