@@ -32,7 +32,7 @@ docs/
   app.js              全部逻辑（IndexedDB 数据层 / hash 路由 / 视图 / 备份）
   sw.js               Service Worker（应用壳离线缓存）
   manifest.webmanifest
-  icons/              应用图标（scripts/make-icons.ps1 生成）
+  icons/              应用图标（node scripts/make-icons.mjs 生成）
 ```
 
 常用命令（需要 Node）：

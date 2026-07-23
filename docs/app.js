@@ -473,8 +473,11 @@ function renderHome() {
   appEl.innerHTML = `
     <header class="top">
       <div class="brand">
-        <span class="brand-mark">拾</span>
-        <div><h1>拾味</h1><p class="sub">${n ? `已收录 ${n} 道菜` : '私人菜谱手册'}</p></div>
+        <h1 class="brand-strip">拾味</h1>
+        <div>
+          <p class="brand-desc">私人菜谱手册</p>
+          <p class="sub">${n ? `已收录 ${n} 道菜` : '还没有收录菜谱'}</p>
+        </div>
       </div>
       <div class="top-actions">
         <a class="icon-btn" href="#/plan" aria-label="周菜单">${ICONS.calendar}</a>
